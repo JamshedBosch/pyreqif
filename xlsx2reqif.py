@@ -9,13 +9,12 @@ import io
 import sys
 
 
-def get_images_from_excel(excel_file, output_file):
-    out_zip = zipfile.ZipFile(document_title + ".reqifz", 'w', zipfile.ZIP_DEFLATED)
-
+def get_images_from_excel(excel_file):
     in_excel = zipfile.ZipFile(excel_file)
-
     if "xl/drawings/drawing1.xml" not in in_excel.namelist():
         return []
+    
+    out_zip = zipfile.ZipFile(document_title + ".reqifz", 'w', zipfile.ZIP_DEFLATED)
 
     ns = "{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing}"
     a_ns = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -24,18 +23,12 @@ def get_images_from_excel(excel_file, output_file):
     drawing_tree = xml.etree.ElementTree.parse(drawing_source)
     drawing_root = drawing_tree.getroot()
 
-    images = []
-    for anchor in drawing_root:
-        row = None
-        col = None
-        img_ref = None
+    images = [{"row":int(anchor.find(ns + "from/" + ns + "row").text),
+               "col": int(anchor.find(ns + "from/" + ns + "col").text),
+               "img_ref": anchor.find(ns + "pic/" + ns + "blipFill/" + a_ns + "blip").attrib[
+            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"]}
+            for anchor in drawing_root]
 
-        row = anchor.find(ns + "from/" + ns + "row").text
-        col = anchor.find(ns + "from/" + ns + "col").text
-        img_ref = anchor.find(ns + "pic/" + ns + "blipFill/" + a_ns + "blip").attrib[
-            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"]
-
-        images.append({"row": int(row), "col": int(col), "img_ref": img_ref})
     drawing_source.close()
     drawing_links_source = in_excel.open("xl/drawings/_rels/drawing1.xml.rels")
     drawing_links_tree = xml.etree.ElementTree.parse(drawing_links_source)
@@ -66,15 +59,12 @@ def get_images(images, row, col):
 file_name = sys.argv[1]
 
 document_title, _ = os.path.splitext(os.path.basename(file_name))
-output_file = document_title + ".reqifz"
 
-images = get_images_from_excel(file_name, output_file)
+images = get_images_from_excel(file_name)
 wb = openpyxl.load_workbook(file_name)
 ws = wb.active
 
-columns = []
-for col_nr in range(1, ws.max_column + 1):
-    columns.append(ws.cell(1, col_nr).value)
+columns = [ws.cell(1, col_nr).value for col_nr in range(1, ws.max_column+1)]
 
 document_reqif_id = "_{}ReqifId-Header".format(document_title)
 spec_reqif_id = "_{}ReqifId--spec".format(document_title)
